@@ -1,0 +1,15 @@
+definition_version: 2
+entities:                                                                                                                                                                                   
+  route_dashboard:
+    type: streamlit
+    identifier:                                                                                                                                                                             
+      name: ROUTE_DASHBOARD
+      schema: CURATED                                                                                                                                                                       
+      database: FLIGHT_PIPELINE_DB                                                                                                                                                          
+    title: "Flight Routes Dashboard"                                                                                                                                                        
+    query_warehouse: PIPELINE_WH                                                                                                                                                            
+    main_file: route_dashboard.py                                                                                                                                                           
+    pages_dir: pages/                                                                                                                                                                       
+    artifacts:  
+      - route_dashboard.py                                                                                                                                                                  
+      - environment.yml
