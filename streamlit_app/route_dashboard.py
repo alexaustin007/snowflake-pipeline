@@ -294,3 +294,107 @@ FROM FLIGHT_PIPELINE_DB.CURATED.CLEAN_ROUTES
 LIMIT 50                                                                                                                                                                                         
 """).to_pandas()
 st.dataframe(sample_df, use_container_width=True)    
+
+st.divider()
+                                                                                                                                                                                    
+# -------- NL→SQL Chatbot --------                                                                                                                                                    
+st.subheader("Ask a question about the routes data")
+st.caption("Type a question in plain English. Cortex will generate the SQL and run it.")                                                                                              
+                                                                                                                                                                                    
+                                                                                                           
+SCHEMA_CONTEXT = """                                                                                                                                                                  
+You are a Snowflake SQL expert. Generate ONLY a SQL query — no explanations,                                                                                                          
+no markdown, no code fences. The query must be valid Snowflake SQL.                                                                                                                   
+                                                                                                                                                                                    
+Available table:                                                                                                                                                                      
+FLIGHT_PIPELINE_DB.CURATED.CLEAN_ROUTES
+                                                                                                                                                                                    
+Columns:
+AIRLINE_CODE STRING            -- airline code (e.g. 'AA', 'BA')                                                                                                                    
+AIRLINE_NAME STRING            -- full airline name                                                                                                                                 
+FLIGHT_NUMBER STRING                                                                                                                                                                
+ORIGIN_AIRPORT STRING          -- 3-letter IATA code                                                                                                                                
+ORIGIN_CITY STRING                                                                                                                                                                  
+ORIGIN_COUNTRY STRING
+ORIGIN_REGION STRING           -- e.g. 'Europe', 'Asia', 'North America'                                                                                                            
+ORIGIN_LATITUDE FLOAT                                                                                                                                                               
+ORIGIN_LONGITUDE FLOAT
+DESTINATION_AIRPORT STRING                                                                                                                                                          
+DESTINATION_CITY STRING
+DESTINATION_COUNTRY STRING                                                                                                                                                          
+DESTINATION_REGION STRING
+DESTINATION_LATITUDE FLOAT                                                                                                                                                          
+DESTINATION_LONGITUDE FLOAT
+DISTANCE_KM FLOAT              -- route distance in kilometers                                                                                                                      
+SEATS NUMBER                                                                                                                                                                        
+AIRCRAFT_TYPE STRING
+FLIGHT_DATE DATE                                                                                                                                                                    
+FLIGHT_YEAR NUMBER
+FLIGHT_MONTH NUMBER                                                                                                                                                                 
+ROUTE_KEY STRING               -- 'ORIGIN-DESTINATION', e.g. 'JFK-LHR'
+IS_INTERNATIONAL BOOLEAN                                                                                                                                                            
+DISTANCE_CATEGORY STRING       -- 'SHORT', 'MEDIUM', or 'LONG'
+                                                                                                                                                                                    
+Rules:          
+- Always fully qualify the table name as FLIGHT_PIPELINE_DB.CURATED.CLEAN_ROUTES                                                                                                      
+- Use COUNT(*), SUM, AVG, etc. for aggregations                                                                                                                                       
+- Always include LIMIT 100 unless the question implies a smaller result                                                                                                               
+- Return only the SQL — no commentary, no semicolon needed                                                                                                                            
+"""                                                                                                                                                                                   
+                
+# Persist last question + SQL across reruns                                                                                                                                           
+if "nl_question" not in st.session_state:
+    st.session_state.nl_question = ""                                                                                                                                                 
+if "generated_sql" not in st.session_state:
+    st.session_state.generated_sql = ""
+                                                                                                                                                                                    
+question = st.text_input(
+    "Your question",                                                                                                                                                                  
+    placeholder="e.g. Which airline has the most international flights?"
+)                                                                                                                                                                                     
+
+if st.button("Ask", type="primary"):                                                                                                                                                  
+    if question.strip():
+        st.session_state.nl_question = question.strip()
+        with st.spinner("Cortex is generating SQL..."):                                                                                                                               
+            # Escape single quotes so they don't break the prompt SQL string
+            safe_question = question.replace("'", "''")                                                                                                                               
+            prompt = f"{SCHEMA_CONTEXT}\n\nUser question: {safe_question}"
+                                                                                                                                                                                    
+            sql_result = session.sql(f"""                                                                                                                                             
+            SELECT SNOWFLAKE.CORTEX.COMPLETE('claude-4-sonnet', $${prompt}$$) AS GENERATED_SQL                                                                                        
+            """).to_pandas()                                                                                                                                                          
+                
+            generated_sql = sql_result["GENERATED_SQL"].iloc[0].strip()                                                                                                               
+                
+            # Strip any markdown code fences the LLM might still add                                                                                                                  
+            if generated_sql.startswith("```"):
+                generated_sql = generated_sql.split("```")[1]                                                                                                                         
+                if generated_sql.startswith("sql"):
+                    generated_sql = generated_sql[3:]                                                                                                                                 
+                generated_sql = generated_sql.strip()
+            generated_sql = generated_sql.rstrip(";").strip()                                                                                                                         
+                                                                                                                                                                                    
+            st.session_state.generated_sql = generated_sql
+                                                                                                                                                                                    
+                                                                                                                                 
+if st.session_state.generated_sql:
+    st.markdown("**Generated SQL**")                                                                                                                                                  
+    st.code(st.session_state.generated_sql, language="sql")
+                                                                                                                                                                                    
+    # Safety guardrail: block destructive statements
+    forbidden = ["DROP ", "DELETE ", "TRUNCATE ", "INSERT ", "UPDATE ", "ALTER ", "CREATE "]                                                                                          
+    sql_upper = st.session_state.generated_sql.upper()                                                                                                                                
+    if any(word in sql_upper for word in forbidden):
+        st.error("Refusing to run — generated SQL contains a write/DDL statement.")                                                                                                   
+    else:                                                                                                                                                                             
+        try:
+            result_df = session.sql(st.session_state.generated_sql).to_pandas()                                                                                                       
+            st.markdown("**Result**")
+            if result_df.empty:                                                                                                                                                       
+                st.info("Query returned no rows.")
+            else:                                                                                                                                                                     
+                st.dataframe(result_df, use_container_width=True)                                                                                                                     
+        except Exception as e:
+            st.error(f"Query failed: {e}")                                                                                                                                            
+            st.caption("The LLM may have generated invalid SQL. Try rephrasing your question.")
