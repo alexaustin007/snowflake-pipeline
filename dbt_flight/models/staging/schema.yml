@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: raw
+    database: FLIGHT_PIPELINE_DB
+    schema: RAW
+    tables:
+      - name: raw_routes
+        description: Raw landing table loaded from CSV via COPY INTO
+
+models:
+  - name: stg_raw_routes
+    description: Cleaned and standardized routes from RAW.RAW_ROUTES
+    columns:
+      - name: route_key
+        tests:
+          - not_null
+      - name: airline_code
+        tests:
+          - not_null
+      - name: flight_date
+        tests:
+          - not_null
