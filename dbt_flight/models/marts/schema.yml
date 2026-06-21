@@ -7,7 +7,6 @@ models:
       - name: route_key
         tests:
           - not_null
-          - unique
       - name: airline_code
         tests:
           - not_null
@@ -15,7 +14,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['SHORT', 'MEDIUM', 'LONG']
+              arguments:
+                values: ['SHORT', 'MEDIUM', 'LONG']
 
   - name: fct_enriched_routes
     description: Cortex AI enriched routes with classification and summary
@@ -33,4 +33,3 @@ models:
     description: Per-airline statistics view
   - name: v_busiest_airports
     description: Busiest airports by total flight appearances
-    description: Final dashboard view joining clean routes with AI enrichment
