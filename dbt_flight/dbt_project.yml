@@ -34,5 +34,6 @@ models:
     staging:
       +materialized: view
       +schema: CURATED
-    example:
-      +materialized: view
+    marts:
+      +materialized: table
+      +schema: CURATED
