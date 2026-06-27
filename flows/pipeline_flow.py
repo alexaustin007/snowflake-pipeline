@@ -38,6 +38,16 @@ def trigger_processing():
     ], check=True)                                                                                                                                                                               
     logger.info("Snowflake task triggered successfully.")                                                                                                                                        
                                                                                                                                                                                                                                                                       
+@task(retries=1, retry_delay_seconds=30, task_run_name="dbt: {command}")
+def run_dbt(command: str):
+    logger = get_run_logger()
+    logger.info(f"Running dbt {command}")
+    subprocess.run(
+        ["venv/bin/dbt", command, "--project-dir", "dbt_flight", "--profiles-dir", "/Users/alexaustinchettiar/.dbt"],
+        check=True
+    )
+    logger.info(f"dbt {command} complete.")
+
 
 @flow(name="flight_pipeline", flow_run_name="flight-pipeline-run")                                                                                                                               
 def flight_pipeline():                                                                                                                                                                           
@@ -51,10 +61,8 @@ def flight_pipeline():
     run_sql("sql/04_copy_into.sql")
     run_sql("sql/07_tasks.sql")
     trigger_processing()
-    run_sql("sql/06_clean_tables.sql")
-    run_sql("sql/08_cortex_enrichment.sql")
-    run_sql("sql/09_final_views.sql")
-    run_sql("sql/10_validation.sql")
+    run_dbt("run")
+    run_dbt("test")
                                                                                                                                                                                                 
     logger.info("=== Pipeline complete ===")                                                                                                                                                          
 
